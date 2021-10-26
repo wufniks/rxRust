@@ -1,5 +1,8 @@
 ## [Unreleased](https://github.com/rxRust/rxRust/compare/v0.15.0...HEAD)
 
+### Breaking Changes
+- **observer**: remove `Observer::is_stopped` method.
+
 ## [0.15.0](https://github.com/rxRust/rxRust/releases/tag/v0.15.0)
 ### Bug Fixes
 - **operator**: fix #160, `FlattenOp` not support chain `BoxOp` because unnecessary bounds to `Observable::Unsub`.
