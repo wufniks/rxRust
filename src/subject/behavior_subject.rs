@@ -1,7 +1,6 @@
 use crate::observer::Observer;
-use crate::prelude::{Subject, SubscriptionLike};
+use crate::prelude::{Subject, SubscriptionLike, TearDownSize};
 
-#[derive(Clone)]
 pub struct BehaviorSubject<O: Observer, U: SubscriptionLike> {
   pub(crate) subject: Subject<O, U>,
   pub(crate) value: O::Item,
@@ -38,6 +37,24 @@ where
 
   #[inline]
   fn complete(&mut self) { self.subject.complete() }
+}
+
+impl<O: Observer, U: SubscriptionLike> TearDownSize for BehaviorSubject<O, U> {
+  #[inline]
+  fn teardown_size(&self) -> usize { self.subject.teardown_size() }
+}
+
+impl<O, S> BehaviorSubject<O, S>
+where
+  O: Observer,
+  S: SubscriptionLike,
+{
+  pub fn new(value: O::Item) -> Self {
+    Self {
+      subject: <_>::default(),
+      value,
+    }
+  }
 }
 #[cfg(test)]
 mod test {

@@ -1,11 +1,11 @@
 use crate::prelude::*;
 mod local_subject;
 pub use local_subject::*;
-
 mod shared_subject;
 pub use shared_subject::*;
+pub mod behavior_subject;
+pub use behavior_subject::*;
 
-#[derive(Clone)]
 pub struct Subject<O: Observer, S: SubscriptionLike> {
   pub(crate) observers: Vec<SubjectObserver<O, S>>,
   pub(crate) subscription: SingleSubscription,
@@ -26,8 +26,9 @@ impl<O: Observer, U: SubscriptionLike> SubscriptionLike for Subject<O, U> {
   fn is_closed(&self) -> bool { self.subscription.is_closed() }
 }
 
-impl<O: Observer, U: SubscriptionLike> Subject<O, U> {
-  fn subscribed_size(&self) -> usize { self.observers.len() }
+impl<O: Observer, U: SubscriptionLike> TearDownSize for Subject<O, U> {
+  #[inline]
+  fn teardown_size(&self) -> usize { self.observers.len() }
 }
 
 #[derive(Clone)]
@@ -44,12 +45,19 @@ where
   type Item = O::Item;
   type Err = O::Err;
   fn next(&mut self, value: Self::Item) {
-    let any_finished = self.observers.iter_mut().fold(false, |finished, o| {
-      o.observer.next(value.clone());
-      finished || o.subscription.is_closed()
-    });
-    if any_finished {
-      self.observers.retain(|o| !o.subscription.is_closed());
+    if !self.subscription.is_closed() {
+      let any_finished =
+        self.observers.iter_mut().fold(false, |finished, o| {
+          if !o.subscription.is_closed() {
+            o.observer.next(value.clone());
+          }
+          finished || o.subscription.is_closed()
+        });
+      if any_finished {
+        self.observers.retain(|o| !o.subscription.is_closed());
+      }
+    } else {
+      self.observers.clear();
     }
   }
 
