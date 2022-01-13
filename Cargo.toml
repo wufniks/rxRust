@@ -35,6 +35,7 @@ optional = true
 default = ["futures-scheduler"]
 tokio-scheduler = ["tokio"]
 futures-scheduler = []
+wasm-scheduler = []
 
 [dev-dependencies]
 float-cmp = "0.8.0"
