@@ -42,6 +42,9 @@ mod observable_next;
 pub use observable_next::*;
 mod defer;
 mod observable_comp;
+pub mod js_interval;
+pub use js_interval::{js_interval, js_interval_at};
+
 pub use defer::*;
 
 use crate::prelude::*;

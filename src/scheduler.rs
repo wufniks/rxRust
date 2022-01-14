@@ -5,7 +5,8 @@ use std::future::Future;
 
 use futures::StreamExt;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+use std::time::{Duration};
+use wasm_timer::{Instant};
 
 pub fn task_future<T>(
   task: impl FnOnce(T) + 'static,
@@ -140,9 +141,23 @@ pub struct LocalSpawner;
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-scheduler"))]
 mod wasm_scheduler {
-  use crate::scheduler::{LocalScheduler, LocalSpawner};
-  use futures::FutureExt;
+  use wasm_bindgen::prelude::*;
+  use wasm_timer::{Instant};
+  use crate::scheduler::{LocalScheduler, LocalSpawner, to_interval};
   use wasm_bindgen_futures::spawn_local;
+  use crate::prelude::SpawnHandle;
+  use futures::channel::oneshot;
+  use std::future::Future;
+  use std::time::Duration;
+  use futures::future::{lazy, FutureExt};
+  use async_std::prelude::FutureExt as AsyncFutureExt;
+
+  #[wasm_bindgen]
+  extern "C" {
+    fn setInterval(closure: &Closure<dyn FnMut()>, millis: u32) -> f64;
+    fn cancelInterval(token: f64);
+  }
+
 
   impl LocalScheduler for LocalSpawner {
     fn spawn<Fut>(&self, future: Fut)
@@ -151,7 +166,62 @@ mod wasm_scheduler {
     {
       spawn_local(future.map(|_| {}));
     }
+
+    fn schedule_repeating(&self, task: impl FnMut(usize) + 'static, time_between: Duration, at: Option<Instant>) -> SpawnHandle {
+      let (f, handle) = repeating_future(task, time_between, at);
+      self.spawn(f.map(|_| ()));
+      handle
+    }
   }
+  //
+  // fn fake_repeating_future(
+  //   task: impl FnMut(usize) + 'static,
+  //   time_between: Duration,
+  //   _at: Option<Instant>,
+  // ) -> (impl Future<Output=()>, SpawnHandle) {
+  //   let mut task = task;
+  //   let fut = lazy(move |_| task(42)).delay(time_between);
+  //   let (fut, handle) = futures::future::abortable(fut);
+  //   (fut.map(|_| ()), SpawnHandle::new(handle))
+  // }
+
+  fn repeating_future(
+    task: impl FnMut(usize) + 'static,
+    time_between: Duration,
+    at: Option<Instant>,
+  ) -> (impl Future<Output = ()>, SpawnHandle) {
+    let now = Instant::now();
+    let delay = at.map(|inst| {
+      if inst > now {
+        inst - now
+      } else {
+        Duration::from_micros(0)
+      }
+    });
+    let future = to_interval(task, time_between, delay.unwrap_or(time_between));
+    let (fut, handle) = futures::future::abortable(future);
+    (fut.map(|_| ()), SpawnHandle::new(handle))
+  }
+
+  // fn to_interval(
+  //   mut task: impl FnMut(usize) + 'static,
+  //   interval_duration: Duration,
+  //   _delay: Duration,
+  // ) -> impl Future<Output = ()> {
+  //   let mut number = 0;
+  //
+  //   futures::future::ready(())
+  //       .then(move |_| {
+  //         let (tx, rx) = oneshot::channel();
+  //         task(number);
+  //         let closure = Closure::new(move || {
+  //           number += 1;
+  //           task(number);
+  //         });
+  //         setInterval(&closure, interval_duration.as_millis() as u32);
+  //         futures::future::ready(())
+  //       })
+  // }
 }
 
 fn repeating_future(
@@ -182,11 +252,12 @@ fn to_interval(
   futures::future::ready(())
     .then(move |_| {
       task(number);
-      async_std::stream::interval(interval_duration).for_each(move |_| {
-        number += 1;
-        task(number);
-        futures::future::ready(())
-      })
+      // futures::future::ready(()).then(move |_| {
+      //   // futures::future::ready(()).delay(interval_duration)
+      //   task(number+1);
+      //   futures::future::ready(())
+      // }).delay(interval_duration)
+      futures::future::ready(()).delay(delay)
     })
     .delay(delay)
 }
