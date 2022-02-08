@@ -173,6 +173,7 @@ mod tokio_scheduler {
   use super::*;
   use std::sync::Arc;
   use tokio::runtime::Runtime;
+  use tokio::task::LocalSet;
 
   impl SharedScheduler for Runtime {
     fn spawn<Fut>(&self, future: Fut)
@@ -189,6 +190,12 @@ mod tokio_scheduler {
       Fut: Future<Output = ()> + Send + 'static,
     {
       Runtime::spawn(self, future);
+    }
+  }
+
+  impl LocalScheduler for LocalSet {
+    fn spawn<Fut>(&self, future: Fut) where Fut: Future<Output=()> + 'static {
+      self.spawn_local(future);
     }
   }
 }
